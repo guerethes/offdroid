@@ -24,7 +24,7 @@ public class ModelORMToSQL implements IModelORMDDL {
 			this.tableName = EntityReflection.getTableName(this.targetClass);
 		} else {
 			throw new NotEntityException("A classe " + targetClass.toString()
-					+ " n�o corresponde a uma entidade mapeada v�lida!");
+					+ " não corresponde a uma entidade mapeada válida!");
 		}
 
 	}

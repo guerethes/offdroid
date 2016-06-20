@@ -26,6 +26,7 @@
 package br.com.guerethes.orm.engine.criterya.pattern;
 
 import java.util.List;
+import java.util.Map;
 
 public interface IElementsQuery {
 
@@ -37,8 +38,9 @@ public interface IElementsQuery {
 	public abstract Object getValue();
 	
 	public abstract String toSql();
+	public abstract Map<String, String> toSqlMap();
 	public abstract String getName();
 	//public abstract void setNameObject(String nameObject);	
-	public abstract <T> List<T> list() throws Exception;
+//	public abstract <T> List<T> list() throws Exception;
 
 }

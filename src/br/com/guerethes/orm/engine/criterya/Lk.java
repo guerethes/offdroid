@@ -4,6 +4,7 @@
 package br.com.guerethes.orm.engine.criterya;
 
 import java.util.List;
+import java.util.Map;
 
 import br.com.guerethes.orm.engine.criterya.pattern.ElementsQueryModel1;
 import br.com.guerethes.orm.engine.criterya.pattern.IElementsQuery;
@@ -46,19 +47,6 @@ public class Lk extends ElementsQueryModel1 {
 	 * (non-Javadoc)
 	 * 
 	 * @see
-	 * br.com.softctrl.h4android.orm.engine.criterya.pattern.IElementsQuery#
-	 * list()
-	 */
-	@Override
-	public <T> List<T> list() {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see
 	 * br.com.softctrl.h4android.orm.engine.criterya.pattern.ElementsQueryModel1
 	 * #toSql()
 	 */
@@ -84,6 +72,12 @@ public class Lk extends ElementsQueryModel1 {
 
 	@Override
 	public IElementsQuery addLimit(IElementsQuery iElementsQuery) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+	
+	@Override
+	public Map<String, String> toSqlMap() {
 		// TODO Auto-generated method stub
 		return null;
 	}

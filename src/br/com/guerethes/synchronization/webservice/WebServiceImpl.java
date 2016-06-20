@@ -40,8 +40,68 @@ public class WebServiceImpl implements WebService {
 	}
 	
 	@Override
+	public InputStream getFile(CriteryaSQLite criteria) throws Exception {
+		String[] json = new String[2];
+		HttpGet httpget = montarURL(criteria);
+		return processarGetFile(criteria.getClassEntity(), json, httpget, false);
+	}
+	
+	private InputStream processarGetFile(Class<?> classEntity, String[] json, HttpGet httpget, boolean b) throws Exception {
+		try {
+			HttpResponse response;
+			getHttpGet(httpget);
+			System.out.println(httpget.getURI());
+			response = HttpClientSingleton.getHttpClientInstace().execute(httpget);
+			HttpEntity entity = response.getEntity();
+			if (entity != null) {
+				// Array de String que recebe o JSON do Web Service
+				json[0] = String.valueOf(response.getStatusLine().getStatusCode());
+				if (json[0].equals("200")) {
+					return entity.getContent();
+				}
+			}				
+		} catch (Exception e) {
+			throw new Exception("Não foi possível conectar-se ao servidor.");
+		}
+		return null;
+	}
+
+	@Override
 	public <T> List<T> get(CriteryaSQLite criteria) throws Exception {
 		String[] json = new String[2];
+		HttpGet httpget = montarURL(criteria);
+		return processarGet(criteria.getClassEntity(), json, httpget, false);
+	}
+
+	@SuppressLint("NewApi")
+	@SuppressWarnings({ "unchecked" })
+	private <T> List<T> processarGet(Class<?> classe, String[] json, HttpGet httpget, boolean file) throws Exception {
+		try {
+			HttpResponse response;
+			getHttpGet(httpget);
+			System.out.println(httpget.getURI());
+			response = HttpClientSingleton.getHttpClientInstace().execute(httpget);
+			HttpEntity entity = response.getEntity();
+			if (entity != null) {
+				// Array de String que recebe o JSON do Web Service
+				json[0] = String.valueOf(response.getStatusLine().getStatusCode());
+				InputStream instream = entity.getContent();
+				json[1] = toString(instream);
+				instream.close();
+				Log.d("get", "Result from post JsonPost : " + json[0] + " : " + json[1]);
+				if (json[0].equals("200")) {
+					return (ArrayList<T>) JSONProcessor.toTransform(json[1], classe);
+				} else {
+					throw new Exception(json[1]);
+				}
+			}				
+		} catch (Exception e) {
+			throw new Exception("Não foi possível conectar-se ao servidor.");
+		}
+		return null;
+	}
+	
+	private HttpGet montarURL(CriteryaSQLite criteria) throws InstantiationException, IllegalAccessException {
 		String completeUrl = "";
 		
 		for (int i = 0; i < criteria.getWheres().size(); i++) {
@@ -74,62 +134,47 @@ public class WebServiceImpl implements WebService {
 		
 		String pathEntity = EntityReflection.getPathName(criteria.getClassEntity());
 		char inicio = (estrategia.isQuery() && criteria.isQuery()) ? '?' :  '/';
-		HttpGet httpget = new HttpGet(url + pathEntity + inicio + completeUrl);
-		return get(criteria.getClassEntity(), json, httpget);
-	}
-	
-	@SuppressLint("NewApi")
-	@SuppressWarnings({ "unchecked" })
-	private <T> List<T> get(Class<?> classe, String[] json, HttpGet httpget) throws Exception {
-		HttpResponse response;
-		getHttpGet(httpget);
-		System.out.println(httpget.getURI());
-		response = HttpClientSingleton.getHttpClientInstace().execute(httpget);
-		HttpEntity entity = response.getEntity();
-		if (entity != null) {
-			// Array de String que recebe o JSON do Web Service
-			json[0] = String.valueOf(response.getStatusLine().getStatusCode());
-			InputStream instream = entity.getContent();
-			json[1] = toString(instream);
-			instream.close();
-
-			if (json[0].equals("200")) {
-				return (ArrayList<T>) JSONProcessor.toTransform(json[1], classe);
-			} else {
-				throw new Exception(json[1]);
-			}
-		}				
-		return null;
+		HttpGet httpget = new HttpGet(EntityReflection.getUrlBase(criteria.getClassEntity(), url) 
+				+ pathEntity + inicio + completeUrl);
+		return httpget;
 	}
 
 	@SuppressWarnings({ "unchecked", "unused"})
 	@Override
 	public <T> T post(T entity) throws Exception {
-		String[] result = new String[2];
-		HttpPost httpPost = new HttpPost(new URI(url + EntityReflection.getPathName(entity.getClass())+ "/"));
-		getHttpPost(httpPost);
-		StringEntity sEntity = new StringEntity(JSONProcessor.toJSON(entity));
-		httpPost.setEntity(sEntity);
-	
-		HttpResponse response;
-		response = HttpClientSingleton.getHttpClientInstace().execute(httpPost);
-		HttpEntity httpEntity = response.getEntity();
+		try {
+			String[] result = new String[2];
+			HttpPost httpPost = new HttpPost(new URI(
+					EntityReflection.getUrlBase(entity.getClass(), url) + 
+						EntityReflection.getPathName(entity.getClass())+ "/"));
+			getHttpPost(httpPost);
+			StringEntity sEntity = new StringEntity(JSONProcessor.toJSON(entity));
+			httpPost.setEntity(sEntity);
 		
-	
-		if (entity != null) {
-			result[0] = String.valueOf(response.getStatusLine().getStatusCode());
-			InputStream instream = httpEntity.getContent();
-			result[1] = toString(instream);
+			HttpResponse response;
+			response = HttpClientSingleton.getHttpClientInstace().execute(httpPost);
+			HttpEntity httpEntity = response.getEntity();
 			
-			instream.close();
-			Log.d("post", "Result from post JsonPost : " + result[0] + " : " + result[1]);
-			
-			if (result[0].equals("201")) {
-				return (!result[1].isEmpty() && !result[1].equals("")) ? ((T) JSONProcessor.toObject(result[1], entity.getClass())) : entity;
-			} else {
-				throw new Exception(result[1]);
+		
+			if (entity != null) {
+				result[0] = String.valueOf(response.getStatusLine().getStatusCode());
+				InputStream instream = httpEntity.getContent();
+				result[1] = toString(instream);
+				
+				instream.close();
+				Log.d("post", "Result from post JsonPost : " + result[0] + " : " + result[1]);
+				
+				if (result[0].equals("201")) {
+					return (!result[1].isEmpty() && !result[1].equals("")) ? ((T) JSONProcessor.toObject(result[1], entity.getClass())) : entity;
+				} else {
+					throw new Exception(result[1]);
+				}
 			}
+			
+		} catch (Exception e) {
+			throw new Exception("Não foi possível conectar-se ao servidor.");
 		}
+		
 		return null;
 	}
 	
@@ -137,53 +182,65 @@ public class WebServiceImpl implements WebService {
 	@SuppressWarnings({ "unused", "unchecked" })
 	@Override
 	public <T> T put(T entity) throws Exception {
-		String[] result = new String[2];
-		HttpPut httpPut = new HttpPut(new URI(url + entity.getClass().getSimpleName().toLowerCase() + "/"));
-		getHttpPut(httpPut);
-		StringEntity sEntity = new StringEntity(JSONProcessor.toJSON(entity));
-		httpPut.setEntity(sEntity);
-
-		HttpResponse response;
-		response = HttpClientSingleton.getHttpClientInstace().execute(httpPut);
-		HttpEntity httpEntity = response.getEntity();
-
-		if (entity != null) {
-			result[0] = String.valueOf(response.getStatusLine().getStatusCode());
-			InputStream instream = httpEntity.getContent();
-			result[1] = toString(instream);
-			instream.close();
-			Log.d("put", "Result from put JsonPost : " + result[0] + " : " + result[1]);
+		try {
+			String[] result = new String[2];
+			HttpPut httpPut = new HttpPut(new URI(EntityReflection.getUrlBase(entity.getClass(), url) 
+					+ entity.getClass().getSimpleName().toLowerCase() + "/"));
+			getHttpPut(httpPut);
+			StringEntity sEntity = new StringEntity(JSONProcessor.toJSON(entity));
+			httpPut.setEntity(sEntity);
+	
+			HttpResponse response;
+			response = HttpClientSingleton.getHttpClientInstace().execute(httpPut);
+			HttpEntity httpEntity = response.getEntity();
+	
+			if (entity != null) {
+				result[0] = String.valueOf(response.getStatusLine().getStatusCode());
+				InputStream instream = httpEntity.getContent();
+				result[1] = toString(instream);
+				instream.close();
+				Log.d("put", "Result from put JsonPost : " + result[0] + " : " + result[1]);
+				
+				if (result[0].equals("200")) {
+					JsonParser parser = new JsonParser();
+					return ((T) JSONProcessor.toObject(result[1], entity.getClass()));
+				} else {
+					throw new Exception(result[1]);
+				}		
+			}
 			
-			if (result[0].equals("200")) {
-				JsonParser parser = new JsonParser();
-				return ((T) JSONProcessor.toObject(result[1], entity.getClass()));
-			} else {
-				throw new Exception(result[1]);
-			}		
+		} catch (Exception e) {
+			throw new Exception("Não foi possível conectar-se ao servidor.");
 		}
+		
 		return null;
 	}
 
 	@SuppressLint("NewApi")
 	@Override
 	public void delete(Object entity, int id) throws Exception {
-		String[] result = new String[2];
-		HttpDelete httpDelete = new HttpDelete(new URI(url + entity.getClass().getSimpleName().toLowerCase() + "/" + id));
-		getHttpDelete(httpDelete);
-		HttpResponse response;
-		response = HttpClientSingleton.getHttpClientInstace().execute(httpDelete);
-		HttpEntity httpEntity = response.getEntity();
-
-		if (entity != null) {
-			result[0] = String.valueOf(response.getStatusLine().getStatusCode());
-			InputStream instream = httpEntity.getContent();
-			result[1] = toString(instream);
-			instream.close();
-			if (result[0].equals("200")) {
-				Log.d("delete", "Result from delete: " + result[0] + " : " + result[1]);	
-			} else {
-				throw new Exception(result[1]);
+		try {
+			String[] result = new String[2];
+			HttpDelete httpDelete = new HttpDelete(new URI(EntityReflection.getUrlBase(entity.getClass(), url) 
+					+ entity.getClass().getSimpleName().toLowerCase() + "/" + id));
+			getHttpDelete(httpDelete);
+			HttpResponse response;
+			response = HttpClientSingleton.getHttpClientInstace().execute(httpDelete);
+			HttpEntity httpEntity = response.getEntity();
+	
+			if (entity != null) {
+				result[0] = String.valueOf(response.getStatusLine().getStatusCode());
+				InputStream instream = httpEntity.getContent();
+				result[1] = toString(instream);
+				instream.close();
+				if (result[0].equals("200")) {
+					Log.d("delete", "Result from delete: " + result[0] + " : " + result[1]);	
+				} else {
+					throw new Exception(result[1]);
+				}
 			}
+		} catch (Exception e) {
+			throw new Exception("Não foi possível conectar-se ao servidor.");
 		}
 	}
 
@@ -229,5 +286,5 @@ public class WebServiceImpl implements WebService {
 	public void setEstrategia(EstrategiaURL estrategia) {
 		this.estrategia = estrategia;
 	}
-	
+
 }

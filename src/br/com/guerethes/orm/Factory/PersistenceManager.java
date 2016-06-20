@@ -29,6 +29,7 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import android.annotation.SuppressLint;
 import android.content.ContentValues;
@@ -41,7 +42,6 @@ import br.com.guerethes.orm.annotation.ddl.ManyToOne;
 import br.com.guerethes.orm.engine.CriteryaSQLite;
 import br.com.guerethes.orm.engine.EstrategiaAtualizacaoBD;
 import br.com.guerethes.orm.engine.GenerateModel;
-import br.com.guerethes.orm.engine.criterya.QuerySample;
 import br.com.guerethes.orm.engine.criterya.Restriction;
 import br.com.guerethes.orm.engine.i.IPersistenceManager;
 import br.com.guerethes.orm.engine.i.PersistDB;
@@ -55,10 +55,11 @@ import br.com.guerethes.orm.util.content.ContentValueUtil;
 import br.com.guerethes.orm.util.content.CursorUtil;
 import br.com.guerethes.orm.util.log.i.ILog;
 import br.com.guerethes.orm.util.log.i.Log;
-import br.com.guerethes.orm.utils.FilterUtils;
+import br.com.guerethes.sync.utils.OperacaoSync;
 import br.com.guerethes.synchronization.annotation.OnlyLocalStorage;
 import br.com.guerethes.synchronization.annotation.OnlyOnLine;
 import br.com.guerethes.synchronization.networkUtils.NetWorkUtils;
+import br.com.guerethes.synchronization.webservice.JSONProcessor;
 
 public class PersistenceManager extends SQLiteOpenHelper implements IPersistenceManager {
 
@@ -158,6 +159,7 @@ public class PersistenceManager extends SQLiteOpenHelper implements IPersistence
 		return insert(entity, true);
 	}
 	
+	@SuppressWarnings("unused")
 	private synchronized <T> T insert(T entity, boolean classePrincipal) {
 		if ( !(EntityReflection.haAnnotation(entity.getClass(), OnlyOnLine.class)) ) {
 			Class<?> entityClass = entity.getClass();
@@ -167,6 +169,7 @@ public class PersistenceManager extends SQLiteOpenHelper implements IPersistence
 					try {
 						field.setAccessible(true);
 						PersistDB value = (PersistDB) field.get(entity);
+
 						if( value != null )
 							insert(value, false);
 						else {
@@ -183,10 +186,12 @@ public class PersistenceManager extends SQLiteOpenHelper implements IPersistence
 			//Essa parte vai inserir a classe que est� dentro do la�o.
 			try {
 				insertAux((PersistDB) entity, classePrincipal);
+				
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		}
+		
 		return entity;
 	}
 
@@ -230,14 +235,16 @@ public class PersistenceManager extends SQLiteOpenHelper implements IPersistence
 		ContentValues cv = ContentValueUtil.putAll(fieldValues);
 		getDbSQLite().insert(tableName, null, cv);
 		if (classePrincipal)	
-			insertSync(entity);
+			insertSync(entity, OperacaoSync.SAVE);
 		getDbSQLite().setTransactionSuccessful();
 		log.i("OffDroid", "INSERT [" + entity.getClass().getSimpleName() + "] - [ ID: "+ EntityReflection.getID(entity)+"].");
 	}
 
 	private synchronized int nextVal(Object entity){
-		String query = "SELECT max("+FieldReflection.getColumnName(entity.getClass(), "id")+") as seq FROM '" + EntityReflection.getTableName(entity.getClass())+ "'" +
-				" WHERE " + FieldReflection.getColumnName(entity.getClass(), "id") + " < 0 limit 1";
+		String query = "SELECT max("+FieldReflection.getColumnName(entity.getClass(), "id")+") as seq " +
+				" FROM '" + EntityReflection.getTableName(entity.getClass())+ "'" +
+				" WHERE " + FieldReflection.getColumnName(entity.getClass(), "id") + " > 0 " +
+				" ORDER BY " + FieldReflection.getColumnName(entity.getClass(), "id") + " desc limit 1 ";
 	    SQLiteDatabase db = getDbSQLite();
 	    Cursor cursor = db.rawQuery(query, null);
 	    String lastId = null;
@@ -252,27 +259,35 @@ public class PersistenceManager extends SQLiteOpenHelper implements IPersistence
 		boolean local = EntityReflection.haAnnotation(entity.getClass(), OnlyLocalStorage.class);
 		
 		int newId = 0;
-		if ( !local ) {
-			if (lastId == null ) {
-				newId = Integer.MIN_VALUE;
+		if ( local ) {
+			if ( lastId == null ) {
+				newId = 1;
 			} else {
 				newId = Integer.parseInt(lastId) + 1;
 			}
+		} else {
+			if (lastId == null )
+				newId = Integer.parseInt(lastId) - Integer.MIN_VALUE;
 		}
 				
 		return newId;
 	}
 
 	public synchronized void updateIdClass(Object entity, int id, int newId) {
-		executeNativeSql("UPDATE "+ EntityReflection.getTableName(entity.getClass()) + 
-	    		" SET " + FieldReflection.getColumnName(entity.getClass(), "id") +" = " + newId + 
-	    		" WHERE " + FieldReflection.getColumnName(entity.getClass(), "id") +" = " + id);
+		updateIdClass(entity.getClass(), id, newId);
 		FieldReflection.setValue(entity, entity.getClass(), FieldReflection.getField(entity.getClass(), "id"), newId);
 	}
+
+	public synchronized void updateIdClass(Class<?> clazz, int id, int newId) {
+		executeNativeSql("UPDATE "+ EntityReflection.getTableName(clazz) + 
+	    		" SET " + FieldReflection.getColumnName(clazz, "id") +" = " + newId + 
+	    		" WHERE " + FieldReflection.getColumnName(clazz, "id") +" = " + id);
+	}
 	
-	private synchronized void insertSync(Object entity){
+	private synchronized void insertSync(Object entity, int operacao){
 		if ( !NetWorkUtils.isOnline() && !(EntityReflection.haAnnotation(entity.getClass(), OnlyOnLine.class)) ) {
-			Sincronizacao sincronizacao = new Sincronizacao(entity.getClass().getName(), (Integer) EntityReflection.getID(entity));
+			Sincronizacao sincronizacao = new Sincronizacao(entity.getClass().getName(), 
+					(Integer) EntityReflection.getID(entity), operacao, JSONProcessor.toJSON(entity));
 			String tableName = EntityReflection.getTableName(sincronizacao.getClass());
 			HashMap<String, FieldValue> fieldValues = EntityReflection.getFieldValues(sincronizacao);
 			ContentValues cv = ContentValueUtil.putAll(fieldValues);
@@ -299,6 +314,7 @@ public class PersistenceManager extends SQLiteOpenHelper implements IPersistence
 		String tableName = EntityReflection.getTableName(entityClass);
 		String[] whereArgs = new String[] { EntityReflection.getID(entity).toString() };
 		getDbSQLite().delete(tableName, "_ID=?", whereArgs);
+//		insertSync(entity, OperacaoSync.DELETE);
 		log.i("OffDroid", "Object id[" + entityClass.getSimpleName() + "<" + whereArgs[0] + ">]-REMOVE.");
 	}
 
@@ -331,17 +347,22 @@ public class PersistenceManager extends SQLiteOpenHelper implements IPersistence
 				if (EntityReflection.isAnnotation(field, ManyToOne.class)) {
 					try {
 						field.setAccessible(true);
-						Object value = field.get(entity);
+						PersistDB value = (PersistDB) field.get(entity);
+						
 						if (value != null)
 							update(value);
+
 					} catch (Exception e) {
 						e.printStackTrace();
 					}
 				}
 			}
 			
+			
 			ContentValues cv = ContentValueUtil.putAll(fieldValues);
 			getDbSQLite().update(tableName, cv, "_ID=?", (new String[] { cv.get("_ID").toString() }));
+
+//			insertSync(entity, OperacaoSync.UPDATE);
 			log.i("OffDroid", "Object-[" + entityClass.getSimpleName()+ "]-UPDATE.");	
 		}
 		
@@ -354,99 +375,53 @@ public class PersistenceManager extends SQLiteOpenHelper implements IPersistence
 	}
 
 	@Override
-	public <T> T find(T entity) throws IllegalAccessException, IllegalArgumentException {
-		return findEntity(entity, true);
-	}
-
-	@SuppressWarnings("unchecked")
-	public <T> List<T> findAllEntity(T entity, String... fields) {
-		List<T> all = ((List<T>) findAll((new QuerySample(entity)).toSql(), entity.getClass()));
-		if ( all != null ) {
-			Object[] values = new Object[fields.length];
-			for (int i = 0; i < values.length; i++)
-				values[i] = FieldReflection.getValue(entity, fields[i]);
-			return (List<T>) FilterUtils.filterBy(all, fields, values);
-		} else {
-			return null;	
-		}
-	}
-
-	public <T> T findEntity(T entity, boolean exibir) throws IllegalAccessException, IllegalArgumentException {
-		if ( !(EntityReflection.haAnnotation(entity.getClass(), OnlyOnLine.class)) ) {
-			SQLiteDatabase db = getDbSQLite();
-			Cursor c = db.rawQuery((new QuerySample(entity)).toSql(), null);
-	
-			if (c.getCount() == 1) {
-				c.moveToFirst();
-				CursorUtil.loadFieldsInCursor(c, entity);
-				
-				List<Field> campos = EntityReflection.getEntityFields(entity.getClass());
-				for (Field field : campos) {
-					if (EntityReflection.isAnnotation(field, ManyToOne.class)) {
-						field.setAccessible(true);
-						findEntity(EntityReflection.getField(entity, field.getName()), false);
-					}
-				}
-				
-				c.close();
-				if (exibir) {
-					log.i("OffDroid", "Object-[" + entity.getClass().getSimpleName() + "]-FIND.");	
-				}
-				return entity;
-			} else {
-				c.close();
-				return null;
-			}
-		}
-		return null;
-	}
-
-	@Override
-	public <T> List<T> findAll(Class<T> classe) throws InstantiationException,IllegalAccessException {
-		return (List<T>) findAll((new QuerySample(classe.newInstance())).toSql(), classe);
-	}
-
-	@Override
-	@SuppressWarnings("unchecked")
-	public <T> List<T> findAll(String sqlSelect, Class<T> classEntity) {
-
+	public <T> List<T> findAllOtimizado(String sqlSelect, Class<T> targetClass, Map<String, String> root) throws Exception {
 		SQLiteDatabase db = getDbSQLite();
 		Cursor c = db.rawQuery(sqlSelect, null);
-		List<T> lEntity = null;
+		
+		List<T> lEntity = new ArrayList<T>();
 		if (c.moveToFirst()) {
-			lEntity = new ArrayList<T>();
 			do {
-				try {
-					Object e = classEntity.newInstance();
-					lEntity.add((T) e);
-					CursorUtil.loadFieldsInCursor(c, e);
-					List<Field> fields = EntityReflection.getEntityFields(classEntity);
-					for (Field field : fields) {
-						if (EntityReflection.isAnnotation(field,ManyToOne.class)) {
-							field.setAccessible(true);
-							findEntity(field.get(e), false);
-						}
-					}
-				} catch (InstantiationException e1) {
-					log.e("Erro", e1.getMessage());
-				} catch (IllegalAccessException e1) {
-					log.e("Erro", e1.getMessage());
-				}
+				PersistDB e = buildReturn(null, targetClass, root, c, null);
+				CursorUtil.loadFieldsInCursor(c, e);
+				lEntity.add((T) e);
 			} while (c.moveToNext());
-			c.close();
-		} else {
 			c.close();
 		}
 		return lEntity;
-
 	}
 
-	@Override
-	public <T> T find(String sqlSelect, Class<T> classEntity) {
-		List<T> list = findAll(sqlSelect, classEntity);
-		if ( list != null )
-			return list.get(0);
-		return null;
+	private <T> PersistDB buildReturn(PersistDB persist, Class<T> targetClass, 
+			Map<String, String> root, Cursor c, String aliasTemp) throws InstantiationException, IllegalAccessException {
+		
+		List<Field> fields;
+		
+		if ( persist != null ) {
+			fields = EntityReflection.getEntityFields(targetClass);
+		} else {
+			persist = (PersistDB) targetClass.newInstance();
+			fields = EntityReflection.getEntityFields(targetClass);
+		}
+		
+		for (Field field : fields) {
+			if (EntityReflection.isAnnotation(field, ManyToOne.class)) {
+				field.setAccessible(true);
+				PersistDB persistDBTemp = (PersistDB) field.getType().newInstance();
+
+				String alias = "";
+				if ( aliasTemp != null && !aliasTemp.isEmpty() ) {
+					alias = aliasTemp + "." + field.getName();
+				} else {
+					alias = field.getName();
+				}
+				
+				CursorUtil.loadFieldsInCursor(c, persistDBTemp, root.get(alias));
+				FieldReflection.setValue(persist, targetClass, field, persistDBTemp);
+				buildReturn(persistDBTemp, persistDBTemp.getClass(), root, c, alias);
+			}
+		}
+		
+		return persist;
 	}
 	
 	/*

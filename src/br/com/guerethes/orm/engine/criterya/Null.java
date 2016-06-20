@@ -27,6 +27,7 @@ package br.com.guerethes.orm.engine.criterya;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import br.com.guerethes.orm.engine.criterya.pattern.ElementsQuery;
 import br.com.guerethes.orm.engine.criterya.pattern.IElementsQuery;
@@ -95,12 +96,6 @@ public class Null extends ElementsQuery {
 	}
 
 	@Override
-	public <T> List<T> list() {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
 	public String getKey() {
 		return FieldReflection.getColumnName(getClassEntity(), getName());
 	}
@@ -118,6 +113,12 @@ public class Null extends ElementsQuery {
 
 	@Override
 	public IElementsQuery addLimit(IElementsQuery iElementsQuery) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Map<String, String> toSqlMap() {
 		// TODO Auto-generated method stub
 		return null;
 	}

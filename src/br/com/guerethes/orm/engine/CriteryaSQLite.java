@@ -25,6 +25,7 @@
  */
 package br.com.guerethes.orm.engine;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -136,12 +137,12 @@ public class CriteryaSQLite {
 	}
 
 	public List<?> toList() throws Exception{
-		return (List<?>) OffDroidManager.find(this);
+		return (List<?>) OffDroidManager.find(this, false);
 	}
 
 	public <T> Object toUniqueResult() throws Exception {
 		limit(Restriction.limit("1"));
-		List<?> list = (List<?>) OffDroidManager.find(this);
+		List<?> list = (List<?>) OffDroidManager.find(this, false);
 		if ( list != null && !list.isEmpty() )
 			return list.get(0);
 		return null;
@@ -154,6 +155,10 @@ public class CriteryaSQLite {
 		if ( result != null  )
 			return result;
 		return null;
+	}
+
+	public InputStream toFile() throws Exception {
+		return (InputStream) OffDroidManager.find(this, true);
 	}
 	
 	public boolean isLocal() {

@@ -29,6 +29,8 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.Map.Entry;
 
 import android.util.Log;
@@ -50,12 +52,14 @@ public class Query extends ElementsQuery {
 
 	@SuppressWarnings("unused")
 	private String select = "*";
+	private Map<String, String> mapProjection;
+	private Map<String, String> mapRoot;
 	private TypeSelect typeQuery = TypeSelect.ALL;
 	private HashMap<Integer, IElementsQuery> where;
 	private HashMap<Integer, IElementsQuery> order;
 	private HashMap<Integer, IElementsQuery> limit;
 	private int count = 0;
-
+	
 	private static HashMap<String, List<Object>> join = null;
 
 	public static HashMap<String, List<Object>> getJoin() {
@@ -101,13 +105,32 @@ public class Query extends ElementsQuery {
 	}
 	
 	@Override
+	public Map<String, String> toSqlMap() {
+		Map<String, String> result = new HashMap<String, String>();
+		String select = toSql();
+		result.put("select", select);
+		result.putAll(mapRoot);
+		return result;
+	}
+	
+	@Override
 	public String toSql() {
-		String sql = "SELECT t.* FROM %s as t %s WHERE (1=1) %s %s;";
+		String sql = "SELECT t.* %s FROM %s as t %s WHERE (1=1) %s %s;";
 		join = null;
 		count = 0;
+		
+		mapProjection = new HashMap<String, String>();
+		mapRoot = new HashMap<String, String>();
 		String joinClausules  = joins(getClassEntity(), "", "t");
 		String whereClausules = "";
 		String orderClausules = "";
+		
+		String projectionTemp = "";
+		if ( mapProjection != null && !mapProjection.isEmpty() ) {
+			Set<String> projection = mapProjection.keySet();
+			for (String proj : projection)
+				projectionTemp += ", " + mapProjection.get(proj);
+		}
 		
 		if ( where != null ) {
 			for (Entry<Integer, IElementsQuery> e : where.entrySet())
@@ -124,34 +147,55 @@ public class Query extends ElementsQuery {
 				orderClausules += e.getValue().toSql();
 		}
 		
-		Log.d("OffDroidQuery", String.format(sql, getKey(), joinClausules, whereClausules, orderClausules));
-		return String.format(sql, getKey(), joinClausules, whereClausules, orderClausules);
+		Log.d("OffDroidQuery", String.format(sql, projectionTemp, getKey(), joinClausules, whereClausules, orderClausules));
+		return String.format(sql, projectionTemp, getKey(), joinClausules, whereClausules, orderClausules);
 	}
 
+	private void createProjection(String key, String value, String attr) {
+		if ( mapProjection.get(key) == null ) {
+			mapProjection.put(key, value);
+		} else {
+			String projection = mapProjection.get(key);
+			projection += ", " + value;
+			mapProjection.put(key, projection);	
+		}
+		
+		if ( mapRoot.get(attr) == null )
+			mapRoot.put(attr, key);
+	}
+	
 	private String joins(Class<?> classe, String attr, String currentJoin) {
+		String attrTemp = attr;
 		String join = "";
 		List<Field> fields = EntityReflection.getEntityFields(classe);
 		for (Field field : fields) {
+			
+			if ( !attr.isEmpty() ) {
+				String joinTemp = currentJoin + "." + FieldReflection.getColumnName(classe, field) + " as " + currentJoin + "_" + FieldReflection.getColumnName(classe, field);
+				createProjection(currentJoin, joinTemp, attr);
+			}
+			
 			if (EntityReflection.isAnnotation(field, ManyToOne.class)) {
+				attrTemp = attr;
 				field.setAccessible(true);
-				String nameJoin = "join_" + (count++) + "_";
+				String nameJoin = "join_" + (count++);
 				
-				if ( attr == "" )
-					attr += field.getName();
+				if ( attrTemp == "" )
+					attrTemp += field.getName();
 				else
-					attr += "." + field.getName();
+					attrTemp += "." + field.getName();
 				
 				//Info Join
 				List<Object> dataTemp = new ArrayList<Object>();
 				dataTemp.add(nameJoin);
 				dataTemp.add(field.getType());
-				getJoin().put(attr, dataTemp);
+				getJoin().put(attrTemp, dataTemp);
 				
 				Class<?> classTemp = field.getType();
 				join += "LEFT JOIN " + EntityReflection.getTableName(classTemp) + " as " + nameJoin + 
 					" ON ( " + currentJoin + "." + FieldReflection.getColumnName(classe, field) + " = " + 
 					nameJoin + "." + FieldReflection.getColumnName(classTemp, "id") + " ) ";
-				join += joins(classTemp, attr, nameJoin);
+				join += joins(classTemp, attrTemp, nameJoin);
 			}
 		}
 		return join;
@@ -169,15 +213,15 @@ public class Query extends ElementsQuery {
 		return this;
 	}
 
-	@SuppressWarnings("unchecked")
-	@Override
-	public <T> java.util.List<T> list() throws Exception {
-		if (typeQuery != TypeSelect.ALL)
-			new SelectAllQueryException("Tipo de consulta n�o retorna list.");
-		String sql = toSql();
-		pm.logger().i("List", "Query-[" + sql + "]-Executed.");
-		return (List<T>) pm.findAll(sql, getClassEntity());
-	}
+//	@SuppressWarnings("unchecked")
+//	@Override
+//	public <T> java.util.List<T> list() throws Exception {
+//		if (typeQuery != TypeSelect.ALL)
+//			new SelectAllQueryException("Tipo de consulta n�o retorna list.");
+//		String sql = toSql();
+//		pm.logger().i("List", "Query-[" + sql + "]-Executed.");
+//		return (List<T>) pm.find(sql, getClassEntity());
+//	}
 
 	@Override
 	public String getKey() {

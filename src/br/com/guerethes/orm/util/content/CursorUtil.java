@@ -40,37 +40,59 @@ import br.com.guerethes.orm.reflection.FieldReflection;
 
 public class CursorUtil extends Activity {
 
-	@SuppressWarnings("unused")
-	public static void loadFieldsInCursor(Cursor cursor, Object entity) {
-
+	public static void loadFieldsInCursor(Cursor cursor, Object entity, String alias) {
 		Class<?> classEntity = entity.getClass();
-		Class<?> classTypeField;
 		List<Field> fields = EntityReflection.getEntityFields(classEntity);
 		for (Field field : fields) {
-			classTypeField = field.getType();
-			FieldReflection.setValue(entity, classEntity, field,
-					getValue(cursor, classEntity, field, entity));
+			if ( FieldReflection.hasColumnBd(field) && !EntityReflection.isAnnotation(field, ManyToOne.class) ) {
+				FieldReflection.setValue(entity, classEntity, field, getValue(cursor, classEntity, field, entity, alias));
+			}
+		}
+	}
+		
+	public static void loadFieldsInCursor(Cursor cursor, Object entity) {
+		Class<?> classEntity = entity.getClass();
+		List<Field> fields = EntityReflection.getEntityFields(classEntity);
+		for (Field field : fields) {
+			if ( FieldReflection.hasColumnBd(field) && !EntityReflection.isAnnotation(field, ManyToOne.class) ) {
+				FieldReflection.setValue(entity, classEntity, field, getValue(cursor, classEntity, field, entity, null));
+			}
 		}
 	}
 
-	public static Object getValue(Cursor cursor, Class<?> classEntity, Field field, Object entity) {
+	private static Object getValue(Cursor cursor, Class<?> classEntity, Field field, Object entity, String alias) {
 		try {
 			if ( EntityReflection.isAnnotation(field, ManyToOne.class) ) {
 				field.setAccessible(true);
 				Object value = null;
 				if ( field.get(entity) == null ) {
 					value = field.getType().newInstance();
-					String columnName = FieldReflection.getColumnName(field.getDeclaringClass(), field);
+					String columnNameTemp = FieldReflection.getColumnName(field.getDeclaringClass(), field);
+					String columnName= "";
+					
+					if ( alias != null ) {
+						columnName = alias + "_" + columnNameTemp;
+					} else {
+						columnName = columnNameTemp;
+					}
+
 					Method m = getMethod(cursor, "getInt");
 					FieldReflection.setValue(value, value.getClass(), 
-						FieldReflection.getField(value.getClass(), "id"), 
-							(Integer) m.invoke(cursor, cursor.getColumnIndex(columnName)));
+							FieldReflection.getField(value.getClass(), "id"), 
+								(Integer) m.invoke(cursor, cursor.getColumnIndex(columnName)));
 					return value;
 				} else
 					return null;	
 			} else {
-				String columnName = FieldReflection.getColumnName(classEntity,
-						field.getName());
+				String columnNameTemp = FieldReflection.getColumnName(classEntity, field.getName());
+				String columnName= "";
+				
+				if ( alias != null ) {
+					columnName = alias + "_" + columnNameTemp;
+				} else {
+					columnName = columnNameTemp;
+				}
+				
 				Method m = getMethod(cursor, getMethodName(field));	
 				return m.invoke(cursor, cursor.getColumnIndex(columnName));
 			}

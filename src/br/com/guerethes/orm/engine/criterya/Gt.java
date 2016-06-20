@@ -26,6 +26,7 @@
 package br.com.guerethes.orm.engine.criterya;
 
 import java.util.List;
+import java.util.Map;
 
 import br.com.guerethes.orm.engine.criterya.pattern.ElementsQueryModel1;
 import br.com.guerethes.orm.engine.criterya.pattern.IElementsQuery;
@@ -68,13 +69,6 @@ public class Gt extends ElementsQueryModel1 {
 	}
 
 	@Override
-	public <T> List<T> list() {
-		new MethodDeprecatedInException(
-				"method <list> not suprted in Gt restriction.");
-		return null;
-	}
-
-	@Override
 	public IElementsQuery addOrder(IElementsQuery iElementsQuery) {
 		// TODO Auto-generated method stub
 		return null;
@@ -82,6 +76,12 @@ public class Gt extends ElementsQueryModel1 {
 
 	@Override
 	public IElementsQuery addLimit(IElementsQuery iElementsQuery) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Map<String, String> toSqlMap() {
 		// TODO Auto-generated method stub
 		return null;
 	}

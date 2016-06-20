@@ -210,22 +210,20 @@ public class FieldReflection {
 
 	}
 
-	public static String getColumnNameDDL(Class<?> targetClass, Field field) {
-
-		String columnName = field.getName();
-		String column = "";
-		if (!field.isAnnotationPresent(Transient.class)) {
-			IColumnBeavior columnBeavior = getAnnotationColumn(field);
-			if (columnBeavior != null) {
-				column = columnBeavior.getDDLColumn(field);
-			} else {
-				column = columnName.toUpperCase() + " "
-						+ FieldReflection.getTypeColumn(field);
-			}
-		}
-		return column;
-
+	public static boolean hasColumnBd(Field field) {
+		return !field.isAnnotationPresent(Transient.class) &&
+			( field.isAnnotationPresent(Column.class) || field.isAnnotationPresent(Id.class));
 	}
-
+	
+	public static String getColumnNameDDL(Class<?> targetClass, Field field) {
+		String column = "";
+		if ( hasColumnBd(field) ) {
+			IColumnBeavior columnBeavior = getAnnotationColumn(field);
+			if (columnBeavior != null)
+				column = columnBeavior.getDDLColumn(field);
+		}
+		
+		return column;
+	}
 	
 }

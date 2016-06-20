@@ -25,6 +25,7 @@
 package br.com.guerethes.orm.engine.i;
 
 import java.util.List;
+import java.util.Map;
 
 import br.com.guerethes.orm.exception.NotEntityException;
 import br.com.guerethes.orm.util.log.i.ILog;
@@ -39,13 +40,7 @@ public interface IPersistenceManager {
 
 	public <T> void update(T entity);
 
-	public <T> T find(T entity) throws Exception;
-
-	public <T> List<T> findAll(Class<T> classe) throws Exception;
-
-	public <T> T find(String sqlSelect, Class<T> targetClass) throws Exception;
-	
-	public <T> List<T> findAll(String sqlSelect, Class<T> targetClass) throws Exception;
+	public <T> List<T> findAllOtimizado(String sqlSelect, Class<T> targetClass, Map<String, String> root) throws Exception;
 
 	public String getDataBaseName();
 
@@ -59,8 +54,6 @@ public interface IPersistenceManager {
 
 	public ILog logger();
 	
-	public <T> List<T> findAllEntity(T entity, String... fields);
-
 	public <T> void insertAll(List<T> entityes);
 	
 	public void updateIdClass(Object entity, int id, int newId);

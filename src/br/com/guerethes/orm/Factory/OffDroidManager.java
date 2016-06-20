@@ -1,9 +1,9 @@
 package br.com.guerethes.orm.Factory;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import android.app.Activity;
 import android.content.Context;
@@ -11,16 +11,22 @@ import android.content.IntentFilter;
 import br.com.guerethes.acra.ActivityAcra;
 import br.com.guerethes.acra.DeviceInformationHandler;
 import br.com.guerethes.exception.OffDroidException;
-import br.com.guerethes.orm.annotation.ddl.ManyToOne;
+import br.com.guerethes.orm.annotation.execute.AfterInsert;
+import br.com.guerethes.orm.annotation.execute.AfterRemove;
+import br.com.guerethes.orm.annotation.execute.AfterUpdate;
+import br.com.guerethes.orm.annotation.execute.BeforeInsert;
+import br.com.guerethes.orm.annotation.execute.BeforeRemove;
+import br.com.guerethes.orm.annotation.execute.BeforeUpdate;
 import br.com.guerethes.orm.engine.CriteryaSQLite;
 import br.com.guerethes.orm.engine.EstrategiaAtualizacaoBD;
 import br.com.guerethes.orm.engine.criterya.QuerySample;
+import br.com.guerethes.orm.engine.criterya.Restriction;
 import br.com.guerethes.orm.engine.i.IPersistenceManager;
 import br.com.guerethes.orm.engine.i.PersistDB;
 import br.com.guerethes.orm.enumeration.ModelBeavior;
-import br.com.guerethes.orm.model.Sincronizacao;
 import br.com.guerethes.orm.reflection.EntityReflection;
-import br.com.guerethes.orm.reflection.FieldReflection;
+import br.com.guerethes.orm.reflection.MethodReflection;
+import br.com.guerethes.sync.utils.SyncUtils;
 import br.com.guerethes.synchronization.annotation.OnlyLocalStorage;
 import br.com.guerethes.synchronization.annotation.OnlyOnLine;
 import br.com.guerethes.synchronization.networkUtils.NetWorkUtils;
@@ -30,7 +36,7 @@ import br.com.guerethes.synchronization.webservice.WebService;
 public class OffDroidManager extends Activity {
 
 	private static IPersistenceManager pm = null;
-	private static WebService service = null;
+	public static WebService service = null;
 	private static Collection<String> classes;
 	
 	public static boolean isReady(String bd) {
@@ -104,7 +110,7 @@ public class OffDroidManager extends Activity {
 		DeviceInformationHandler.register(context);
 		
 	    initializeBroadcast(context);
-
+	    
 		pm = new PersistenceManager(context, dbName, DeviceInformationHandler.APP_CODE, classes, Context.MODE_PRIVATE, ModelBeavior.RENEW, 1, estrategia);
 		
 		if(email != null && !email.isEmpty()) {
@@ -117,116 +123,153 @@ public class OffDroidManager extends Activity {
 	    mIntentFilter.addAction("android.net.conn.CONNECTIVITY_CHANGE");
 	    mIntentFilter.addAction("android.net.wifi.WIFI_STATE_CHANGED");
 	    context.registerReceiver(new NetworkChangeReceiver(), mIntentFilter);
-	    NetWorkUtils.setOnline(NetworkChangeReceiver.isOnline(context));
+	    NetWorkUtils.setOnline(NetWorkUtils.isOnline(context));
 	}
 	
 	@SuppressWarnings({ "rawtypes" })
-	public static Object find(final CriteryaSQLite criteria) throws Exception {
-		if ( criteria.isLocal() ) {
-			return pm.findAll(new QuerySample(criteria.getClassEntity(), criteria.getWheres(), 
-						criteria.getOrderBy(), criteria.getLimit()).toSql(), criteria.getClassEntity());
+	public static Object find(final CriteryaSQLite criteria, final boolean file) throws Exception {
+		if ( file ) {
+			return service.getFile(criteria);
 		} else {
-			if ( EntityReflection.haAnnotation(criteria.getClassEntity(), OnlyOnLine.class) ) {
-				if ( NetWorkUtils.isOnline() ) {
-					return service.get(criteria);
-				} else {
-					return null;
-				}
-			} else if ( EntityReflection.haAnnotation(criteria.getClassEntity(), OnlyLocalStorage.class) ) {
-				return pm.findAll(new QuerySample(criteria.getClassEntity(), criteria.getWheres(), criteria.getOrderBy(), criteria.getLimit()).toSql(), criteria.getClassEntity());
+			if ( criteria.isLocal() ) {
+				Map<String, String> mapResult = new QuerySample(criteria.getClassEntity(), criteria.getWheres(), 
+						criteria.getOrderBy(), criteria.getLimit()).toSqlMap();
+				return pm.findAllOtimizado(mapResult.get("select"), criteria.getClassEntity(), mapResult);
 			} else {
-				if ( NetWorkUtils.isOnline() ) {
-					final List result = service.get(criteria);
-					new Thread(new Runnable() { 
-			            public void run(){        
-			            	try {
-								syncAll(result, criteria.getClassEntity());
-							} catch (Exception e) {
-								e.printStackTrace();
-							}
-			            }
-			        }).start();
-					return result;	
+				if ( EntityReflection.haAnnotation(criteria.getClassEntity(), OnlyOnLine.class) ) {
+					if ( NetWorkUtils.isOnline() ) {
+						return service.get(criteria);
+					} else {
+						return null;
+					}
+				} else if ( EntityReflection.haAnnotation(criteria.getClassEntity(), OnlyLocalStorage.class) ) {
+					Map<String, String> mapResult = new QuerySample(criteria.getClassEntity(), criteria.getWheres(), 
+							criteria.getOrderBy(), criteria.getLimit()).toSqlMap();
+					return pm.findAllOtimizado(mapResult.get("select"), criteria.getClassEntity(), mapResult);
 				} else {
-					return pm.findAll(new QuerySample(criteria.getClassEntity(), criteria.getWheres(), criteria.getOrderBy(), criteria.getLimit()).toSql(), criteria.getClassEntity());
+					if ( NetWorkUtils.isOnline() ) {
+						final List result = service.get(criteria);
+						SyncUtils.syncAll(result, criteria.getClassEntity());
+						return result;	
+					} else {
+						Map<String, String> mapResult = new QuerySample(criteria.getClassEntity(), criteria.getWheres(), 
+								criteria.getOrderBy(), criteria.getLimit()).toSqlMap();
+						return pm.findAllOtimizado(mapResult.get("select"), criteria.getClassEntity(), mapResult);
+					}
 				}
 			}
 		}
 	}
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	private static void syncAll(List<?> array, Class classe) throws Exception {
-		ArrayList<?> all = new ArrayList(array);
-		if ( all != null && !all.isEmpty() ) {
-			ArrayList arrayBD = (ArrayList) pm.findAll(classe);
-			if ( arrayBD != null && !arrayBD.isEmpty() ) {
-				all.removeAll(arrayBD);
-				if ( !all.isEmpty() )
-					pm.insertAll(all);	
-			} else
-				pm.insertAll(all);
-		}
-	}
-	
-	@SuppressWarnings({ "rawtypes", "unchecked" })
 	public static <T> List<PersistDB> insertAll(List entitys) throws Exception {
 		if ( entitys != null && entitys.size() > 0 ) {
-			for (int i = 0; i < entitys.size(); i++)
-				insert((PersistDB) entitys.get(i));
+			for (int i = 0; i < entitys.size(); i++) {
+				PersistDB entity = (PersistDB) entitys.get(i);
+				insert(entity);
+			}
 		}
 		return entitys;
 	}
 
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	public static <T> List<PersistDB> insertAllLocal(List entitys) throws Exception {
-		if ( EntityReflection.haAnnotation(entitys.get(0).getClass(), OnlyLocalStorage.class) ) {
-			throw new OffDroidException("N�o foi poss�vel inserir devido a anota��o presente na classe.");
+		if ( EntityReflection.haAnnotation(entitys.get(0).getClass(), OnlyOnLine.class) ) {
+			throw new OffDroidException("Não foi possível inserir devido a anotação presente na classe.");
 		} else {
 			if ( entitys != null && entitys.size() > 0 ) {
-				for (int i = 0; i < entitys.size(); i++)
-					insertLocal((PersistDB) entitys.get(i));
+				for (int i = 0; i < entitys.size(); i++) {
+					PersistDB entity = (PersistDB) entitys.get(i);
+					insertLocal(entity);
+				}
 			}
 		}
 		return entitys;
 	}
 	
 	public static <T> PersistDB insertLocal(PersistDB entity) throws Exception {
-		if ( EntityReflection.haAnnotation(entity.getClass(), OnlyLocalStorage.class) ) {
-			throw new OffDroidException("N�o foi poss�vel inserir devido a anota��o presente na classe.");
+		if ( EntityReflection.haAnnotation(entity.getClass(), OnlyOnLine.class) ) {
+			throw new OffDroidException("Não foi possível inserir devido a anotação presente na classe.");
 		} else {
+			if ( MethodReflection.haAnnotation(entity.getClass(), BeforeInsert.class) )
+				MethodReflection.getMethodAnnotation(entity.getClass(), BeforeInsert.class).invoke(entity);
 			entity = pm.insert(entity);
+			if ( MethodReflection.haAnnotation(entity.getClass(), AfterInsert.class) )
+				MethodReflection.getMethodAnnotation(entity.getClass(), AfterInsert.class).invoke(entity);
 			return entity;
 		}
 	}
 	
 	public static <T> PersistDB insert(PersistDB entity) throws Exception {
-		enviarSincronismo();
 		Object obj = null;
+		
+		if ( MethodReflection.haAnnotation(entity.getClass(), BeforeInsert.class) )
+			MethodReflection.getMethodAnnotation(entity.getClass(), BeforeInsert.class).invoke(entity);
+		
 		if ( NetWorkUtils.isOnline() && !(EntityReflection.haAnnotation(entity.getClass(), OnlyLocalStorage.class)))
 			entity = (PersistDB) service.post(entity);
 		entity = (PersistDB) (obj != null ? obj : entity);
 		if ( !(EntityReflection.haAnnotation(entity.getClass(), OnlyOnLine.class)) )
 			entity = pm.insert(entity);
+
+		if ( MethodReflection.haAnnotation(entity.getClass(), AfterInsert.class) )
+			MethodReflection.getMethodAnnotation(entity.getClass(), AfterInsert.class).invoke(entity);
+
 		return entity;
 	}
 
+	public static <T> PersistDB updateLocal(PersistDB entity) throws Exception {
+		if ( !(EntityReflection.haAnnotation(entity.getClass(), OnlyOnLine.class)) ) {
+			if ( MethodReflection.haAnnotation(entity.getClass(), BeforeUpdate.class) )
+				MethodReflection.getMethodAnnotation(entity.getClass(), BeforeUpdate.class).invoke(entity);
+			pm.update(entity);
+			
+			if ( MethodReflection.haAnnotation(entity.getClass(), AfterUpdate.class) )
+				MethodReflection.getMethodAnnotation(entity.getClass(), AfterUpdate.class).invoke(entity);
+		}
+		return entity;
+	}
+	
 	@SuppressWarnings("unchecked")
 	public static <T> PersistDB update(PersistDB entity) throws Exception {
-		enviarSincronismo();
 		Object obj = null;
+		
+		if ( MethodReflection.haAnnotation(entity.getClass(), BeforeUpdate.class) )
+			MethodReflection.getMethodAnnotation(entity.getClass(), BeforeUpdate.class).invoke(entity);
+		
 		if ( NetWorkUtils.isOnline() && !(EntityReflection.haAnnotation(entity.getClass(), OnlyLocalStorage.class)))
 			obj = (T) service.put(entity);
 		entity = (PersistDB) (obj != null ? obj : entity);
 		if ( !(EntityReflection.haAnnotation(entity.getClass(), OnlyOnLine.class)) )
 			pm.update(entity);
+		
+		if ( MethodReflection.haAnnotation(entity.getClass(), AfterUpdate.class) )
+			MethodReflection.getMethodAnnotation(entity.getClass(), AfterUpdate.class).invoke(entity);
+		
 		return entity;
+	}
+
+	public static void deleteLocal(PersistDB entity) throws Exception{
+		if ( !(EntityReflection.haAnnotation(entity.getClass(), OnlyOnLine.class)) ) {
+			if ( MethodReflection.haAnnotation(entity.getClass(), BeforeRemove.class) )
+				MethodReflection.getMethodAnnotation(entity.getClass(), BeforeRemove.class).invoke(entity);
+			pm.remove(entity);
+			if ( MethodReflection.haAnnotation(entity.getClass(), AfterRemove.class) )
+				MethodReflection.getMethodAnnotation(entity.getClass(), AfterRemove.class).invoke(entity);
+		}
 	}
 	
 	public static void delete(PersistDB entity) throws Exception{
-		enviarSincronismo();
+		if ( MethodReflection.haAnnotation(entity.getClass(), BeforeRemove.class) )
+			MethodReflection.getMethodAnnotation(entity.getClass(), BeforeRemove.class).invoke(entity);
+
 		if ( NetWorkUtils.isOnline() && !(EntityReflection.haAnnotation(entity.getClass(), OnlyLocalStorage.class)))
 			service.delete(entity, (Integer) EntityReflection.getID(entity));
+		
 		pm.remove(entity);
+
+		if ( MethodReflection.haAnnotation(entity.getClass(), AfterRemove.class) )
+			MethodReflection.getMethodAnnotation(entity.getClass(), AfterRemove.class).invoke(entity);
 	}
 
 	public static void executeNativeSQL(String sql) throws Exception{
@@ -241,57 +284,16 @@ public class OffDroidManager extends Activity {
 		}
 	}
 	
-	public synchronized static void enviarSincronismo() {
-		new Thread(new Runnable() { 
-            public void run(){        
-				List<Sincronizacao> bdLocal;
-				try {
-					bdLocal = pm.findAll(Sincronizacao.class);
-					if ( bdLocal != null && NetWorkUtils.isOnline() ) {
-						for (Sincronizacao sync : bdLocal) {
-							//Carregar Classe para sincronismo
-							Object entity;
-							entity = Class.forName(sync.getClasse()).getConstructor().newInstance();
-							FieldReflection.setValue(entity, entity.getClass(), FieldReflection.getField(sync.getClass(),"idClasse"), sync.getIdClasse());
-							pm.find(entity);
-							
-							//Setar Id's das Classes para null 
-							List<Field> fields = EntityReflection.getEntityFields(entity.getClass());
-							for (Field field : fields) {
-								if (EntityReflection.isAnnotation(field, ManyToOne.class)) {
-									field.setAccessible(true);
-									Object value = field.get(entity);
-									FieldReflection.setValue(value, value.getClass(), FieldReflection.getField(value.getClass(),"id"), null);
-								}
-							}
-							
-							//Realizar Servi�o
-							FieldReflection.setValue(entity, entity.getClass(), FieldReflection.getField(entity.getClass(),"id"), null);
-							entity = service.post(entity);
-							
-							//Colocar novo Id das classes
-							for (Field field : fields) {
-								if (EntityReflection.isAnnotation(field, ManyToOne.class)) {
-									field.setAccessible(true);
-									Object value = field.get(entity);
-									pm.updateIdClass(value, sync.getIdClasse(), (Integer) EntityReflection.getID(entity));
-								}
-							}
-							pm.updateIdClass(entity, sync.getIdClasse(), (Integer) EntityReflection.getID(entity));
-							pm.remove(entity);
-						}
-					}
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-            }
-		}).start();
-	}
-
 	public static Object login(CriteryaSQLite criteria) throws Exception {
 		if ( criteria.isLocal() ) {
-			return pm.find(new QuerySample(criteria.getClassEntity(), criteria.getWheres(), 
-						criteria.getOrderBy(), criteria.getLimit()).toSql(), criteria.getClassEntity());
+			criteria.add(Restriction.limit("1"));
+			Map<String, String> mapResult = new QuerySample(criteria.getClassEntity(), criteria.getWheres(), 
+					criteria.getOrderBy(), criteria.getLimit()).toSqlMap();
+			List<?> list = pm.findAllOtimizado(mapResult.get("select"), criteria.getClassEntity(), mapResult);
+			if ( list != null && list.size() > 0 )
+				return list.get(0);
+			else
+				return null;
 		} else {
 			if ( EntityReflection.haAnnotation(criteria.getClassEntity(), OnlyOnLine.class) ) {
 				if ( NetWorkUtils.isOnline() ) {
@@ -300,12 +302,26 @@ public class OffDroidManager extends Activity {
 					return null;
 				}
 			} else if ( EntityReflection.haAnnotation(criteria.getClassEntity(), OnlyLocalStorage.class) ) {
-				return pm.find(new QuerySample(criteria.getClassEntity(), criteria.getWheres(), criteria.getOrderBy(), criteria.getLimit()).toSql(), criteria.getClassEntity());
+				criteria.add(Restriction.limit("1"));
+				Map<String, String> mapResult = new QuerySample(criteria.getClassEntity(), criteria.getWheres(), 
+						criteria.getOrderBy(), criteria.getLimit()).toSqlMap();
+				List<?> list = pm.findAllOtimizado(mapResult.get("select"), criteria.getClassEntity(), mapResult);
+				if ( list != null && list.size() > 0 )
+					return list.get(0);
+				else
+					return null;
 			} else {
 				if ( NetWorkUtils.isOnline() ) {
 					return service.login(criteria);
 				} else {
-					return pm.find(new QuerySample(criteria.getClassEntity(), criteria.getWheres(), criteria.getOrderBy(), criteria.getLimit()).toSql(), criteria.getClassEntity());
+					criteria.add(Restriction.limit("1"));
+					Map<String, String> mapResult = new QuerySample(criteria.getClassEntity(), criteria.getWheres(), 
+							criteria.getOrderBy(), criteria.getLimit()).toSqlMap();
+					List<?> list = pm.findAllOtimizado(mapResult.get("select"), criteria.getClassEntity(), mapResult);
+					if ( list != null && list.size() > 0 )
+						return list.get(0);
+					else
+						return null;
 				}
 			}
 		}

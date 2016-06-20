@@ -26,6 +26,7 @@
 package br.com.guerethes.orm.engine.criterya;
 
 import java.util.List;
+import java.util.Map;
 
 import br.com.guerethes.orm.engine.criterya.pattern.ElementsQueryModel1;
 import br.com.guerethes.orm.engine.criterya.pattern.IElementsQuery;
@@ -43,19 +44,6 @@ public class Eq extends ElementsQueryModel1 {
 		return eq;
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see
-	 * br.com.softctrl.h4android.orm.engine.criterya.pattern.IElementsQuery#
-	 * list()
-	 */
-	@Override
-	public <T> List<T> list() {
-		new MethodDeprecatedInException("method <List> not suprted in Eq restriction.");
-		return null;
-	}
-
 	@Override
 	public IElementsQuery add(IElementsQuery iElementsQuery) {
 		return null;
@@ -69,6 +57,12 @@ public class Eq extends ElementsQueryModel1 {
 
 	@Override
 	public IElementsQuery addLimit(IElementsQuery iElementsQuery) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Map<String, String> toSqlMap() {
 		// TODO Auto-generated method stub
 		return null;
 	}

@@ -68,14 +68,14 @@ public abstract class ElementsQueryModel1 extends ElementsQuery {
 	 * @see java.lang.Object#toString()
 	 */
 	public String toString() {
+		String sColumn = null;
 		if ( getName().lastIndexOf(".") != -1 ) {
-			List<Object> values = Query.getJoin().get(getName().substring(0, getName().lastIndexOf(".")));
-			String sColumn = values.get(0) + "." + FieldReflection.getColumnName( (Class<?>) values.get(1), getName().substring(getName().lastIndexOf(".")+1, getName().length()));
-			return String.format("%s %s %s", sColumn, SIGNAL_OPERATOR, getValue());
+			List<Object> values = Query.getJoin().get(this.getName().substring(0, this.getName().lastIndexOf(".")));
+			sColumn = values.get(0) + "." + FieldReflection.getColumnName((Class<?>) values.get(1), this.getName().substring(getName().lastIndexOf(".")+1, this.getName().length()));
 		} else {
-			String sColumn = "t." + FieldReflection.getColumnName(getClassEntity(), getName());
-			return String.format("%s %s %s", sColumn, SIGNAL_OPERATOR, getValue());
+			sColumn = "t." + FieldReflection.getColumnName(getClassEntity(), this.getName());
 		}
+		return String.format("%s %s %s", sColumn, SIGNAL_OPERATOR, this.getValue());
 	}
 
 	/*

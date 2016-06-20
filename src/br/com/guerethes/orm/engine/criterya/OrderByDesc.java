@@ -26,6 +26,7 @@
 package br.com.guerethes.orm.engine.criterya;
 
 import java.util.List;
+import java.util.Map;
 
 import br.com.guerethes.orm.engine.criterya.pattern.ElementsQueryModel1;
 import br.com.guerethes.orm.engine.criterya.pattern.IElementsQuery;
@@ -60,11 +61,6 @@ public class OrderByDesc extends ElementsQueryModel1 {
 	}
 
 	@Override
-	public <T> List<T> list() throws Exception {
-		return null;
-	}
-
-	@Override
 	public IElementsQuery addOrder(IElementsQuery iElementsQuery) {
 		// TODO Auto-generated method stub
 		return null;
@@ -75,5 +71,12 @@ public class OrderByDesc extends ElementsQueryModel1 {
 		// TODO Auto-generated method stub
 		return null;
 	}
+	
+	@Override
+	public Map<String, String> toSqlMap() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
 
 }

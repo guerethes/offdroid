@@ -41,7 +41,7 @@ public class MailSender implements ReportSender{
 	@SuppressWarnings("static-access")
 	public MailSender() {
 		super();
-		this.email = "mobile@info.ufrn.br";
+		this.email = "mail@mail.br";
 		initSession();
 	}
 
@@ -52,7 +52,7 @@ public class MailSender implements ReportSender{
 			nameApp = DeviceInformationHandler.APP_NAME == null || DeviceInformationHandler.APP_NAME.isEmpty() 
 					? "SINFO MOBILE" : DeviceInformationHandler.APP_NAME;
 			if (NetWorkUtils.isOnline()) {
-				sendMail("Erro Inesperado, Subsistema: " + nameApp, reportBody, "naoresponder@info.ufrn.br", email);	
+				sendMail("Erro Inesperado, Subsistema: " + nameApp, reportBody, "mail@mail.br", email);	
 				checkHasFile();
 			} else {
 				createFile(reportBody);
@@ -84,7 +84,7 @@ public class MailSender implements ReportSender{
 			        text.append('\n');
 			    }
 			    br.close();
-			    sendMail("CRASH REPORT", text.toString(), "mobile@info.ufrn.br", mailSender);
+			    sendMail("CRASH REPORT", text.toString(), "mail@mail.br", mailSender);
 			    f.delete();
 			} catch (Exception e) {
 				// TODO: handle exception
@@ -105,7 +105,7 @@ public class MailSender implements ReportSender{
 
 	public void initSession(){
 		Properties props = new Properties();
-		props.put("mail.smtp.host", "smtp.info.ufrn.br");
+		props.put("mail.smtp.host", "smtp.mail.ufrn.br");
 		session = Session.getInstance(props);
 	}
 

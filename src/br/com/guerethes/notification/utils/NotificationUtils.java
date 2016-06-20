@@ -13,10 +13,14 @@ import android.widget.Toast;
 public class NotificationUtils extends Activity {
 	
 	public static void notify(Context context, Intent intent, int icon, String title, String body){
-		notify(context, intent, icon, title, body, 0xffffffff);
+		notify(context, intent, icon, title, body, 0xffffffff, 0);
+	}
+	
+	public static void notify(Context context, Intent intent, int icon, String title, String body, int id){
+		notify(context, intent, icon, title, body, 0xffffffff, id);
 	}
 		
-	public static void notify(Context context, Intent intent, int icon, String title, String body, int cor){
+	public static void notify(Context context, Intent intent, int icon, String title, String body, int cor, int id){
 		Notification.Builder builder = new Notification.Builder(context);
 		PendingIntent pendingIntent1 = PendingIntent.getActivity(context, 0, intent, 0);
 		builder.setContentIntent(pendingIntent1)
@@ -35,9 +39,9 @@ public class NotificationUtils extends Activity {
 		notification.flags |= Notification.FLAG_SHOW_LIGHTS;
 		notification.ledOnMS = 1000;
 		notification.ledOffMS = 3000;
-        
-        NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
-        notificationManager.notify(0, notification);
+
+		NotificationManager notificationManager = (NotificationManager) context.getSystemService(NOTIFICATION_SERVICE);
+        notificationManager.notify(id, notification);
 	}
 
 	public static void toatsShort(Context c, String msg){
